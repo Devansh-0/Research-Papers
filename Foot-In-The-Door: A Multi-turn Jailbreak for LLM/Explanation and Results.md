@@ -3,7 +3,7 @@
 **Author / Researcher:** Independent Alignment & Governance Study  
 **Domain:** Technical AI Governance & Behavioral Red-Teaming  
 **Target Paper:** *Foot-In-The-Door: A Multi-turn Jailbreak for LLMs* (Weng et al., arXiv:2502.19820, 2025)  
-**Replication Codebase:** https://colab.research.google.com/drive/1xeUTOvYqMs8Yxn8g9C-i9Su8Xvu2E0EV?usp=sharing  
+**Replication Codebase:** https://colab.research.google.com/drive/1xeUTOvYqMs8Yxn8g9C-i9Su8Xvu2E0EV?usp=sharing
 **Target Architecture Tested:** Google Gemini 3.5 Flash / Gemini 3.7 Flash via Google GenAI SDK  
 **Assistant / Judge Architecture:** Gemini 3.7 Flash / Gemini 2.5 Pro (automated LLM-as-a-Judge)  
 
