@@ -26,6 +26,77 @@ The goal of this experiment was to empirically isolate the mathematical represen
 
 Through iterative regularization and structural prompt controls, we discovered that Gemma-2-2B does not immediately understand the concept of a "hidden agenda" in its early layers. Instead, the conceptual separation between honesty and deception climbs steadily as the context is processed, hitting a decisive peak at **Layer 8**. By extracting the difference in mean activations at this specific layer, we successfully computed a steering vector capable of modulating the model's behavioral alignment.
 
+### Theoretical Foundations & TransformerLens Mechanics
+
+
+### 1. Mathematical and Theoretical Framework of Activation Extraction & Steering
+Mechanistic interpretability operates on the hypothesis that transformer-based language models represent semantic concepts and behavioral personas as directional vectors within a high-dimensional continuous space known as the **residual stream**. 
+
+Mathematically, let a transformer model consist of \(L\) sequential layers, where each layer \(l \in \{1, 2, \dots, L\}\) applies a transformation (via self-attention and MLP blocks) to the residual stream vector \(x_l \in \mathbb{R}^{d_{\text{model}}}\). 
+* **Concept Representation:** When a model processes a prompt embodying a specific concept (e.g., honesty vs. deception), the residual stream accumulates features that linearly encode that semantic variable. 
+* **Linear Probing:** We train a linear classifier (logistic regression) parameterized by weight vector \(w\) and bias \(b\) to predict the binary label \(y \in \{0, 1\}\) (honest vs. deceptive) directly from the activation vector \(x_l\):
+
+
+$$P(y=1 \vert{} x_l) = \sigma(w^T x_l + b)$$
+
+The classification accuracy across layers reveals where the model synthesizes the concept.
+
+* **Intervention (Steering Vector):** By computing the difference between the mean deceptive activation vector and the mean honest activation vector at the empirically identified peak layer $l^*$, we isolate the directional vector of deception:
+
+$$v_{\text{steer}} = \frac{1}{N}\sum_{i=1}^N x_{l^{\ast}, \text{deceptive}}^{(i)} - \frac{1}{N}\sum_{i=1}^N x_{l^{\ast}, \text{honest}}^{(i)}$$
+
+
+
+During inference, we intervene on the residual stream by adding a scaled version of this vector:
+
+$$x_{l^{\ast}} \leftarrow x_{l^{\ast}} + \alpha v_{\text{steer}}$$
+
+
+where $\alpha$ is the steering coefficient. This forces the model's internal trajectory along the manipulated axis, testing whether synthetic activation pressure can override native safety guardrails.
+
+
+### 2. Hooking and Extracting Activations Using TransformerLens
+
+While native Hugging Face forward hooks require manual tensor tracking, dimension-agnostic slicing, and device/dtype management, **TransformerLens** (developed by Neel Nanda) automates these mechanics by wrapping Hugging Face models into a specialized `HookedTransformer` architecture.
+
+* **How it works:** TransformerLens standardizes layer naming conventions and residual stream injection points. Instead of manually registering a PyTorch module hook onto `hf_model.model.layers[idx]`, TransformerLens allows you to specify a hook point using clean string identifiers (e.g., `"blocks.8.hook_resid_post"`).
+* **Extraction Syntax:**
+```python
+import torch
+from transformer_lens import HookedTransformer
+
+# Load model into TransformerLens wrapper
+model = HookedTransformer.from_pretrained("gemma-2-2b-it", device="cuda")
+
+# Run model and cache all internal activations automatically
+_, cache = model.run_with_cache("Your prompt here")
+
+# Extract residual stream activations at Layer 8 (post-block)
+layer_8_activations = cache["blocks.8.hook_resid_post"]
+
+```
+
+
+* **Why it simplifies the pipeline:** It automatically handles tokenization mapping, batch dimensions, and device routing, eliminating the `IndexError` vulnerabilities common in raw PyTorch implementations.
+
+### 3. Determining the Optimal Hook Layer Location
+
+A common question in mechanistic interpretability is: *How do we know which layer to hook?*
+
+* **Empirical Sweep vs. A Priori Guessing:** Rather than guessing where a concept lives, researchers perform a full-layer sweep (probing every single layer from $0$ to $L$) as we did in our linear probe analysis.
+* **The Layer Horizon:** Early layers ($0$ to $2$) typically capture low-level syntax and token positions. Middle-to-late layers ($6$ to $12$ in a 26-layer model) represent abstract semantic integration, persona adoption, and constraint checking. The optimal hook layer is empirically defined as the **peak accuracy layer** where a regularized linear probe achieves maximum class separation before the network begins mapping concepts into final token prediction logits.
+
+### 4. Addressing Interpretability Blind Spots: Does Raw Activation Extraction Obscure Model Processing?
+
+A critical methodological concern is whether bypassing high-level abstractions or working directly with raw residual stream tensors makes it difficult to interpret what the model is actually doing.
+
+* **The Risk of Polysemanticity:** Individual neurons in a transformer are rarely monolsemantic (representing a single clear concept); instead, representations are **polysemantic**, meaning directions in the activation space encode multiple overlapping features.
+* **Mitigation via Probing & Steering:** While raw vectors can be noisy, linear probes act as hyperplanes that isolate the *subspace* relevant to the contrastive task. Furthermore, steering interventions serve as an empirical validation check: if injecting a vector reliably alters text generation in a predictable, targeted manner (e.g., shifting from helpful boilerplate to defensive data-handling assurances), it confirms that the extracted vector genuinely controls the behavioral axis in question, mitigating the ambiguity of raw residual analysis.
+
+```
+
+```
+
 ---
 
 ## 2. Replication Setup & Model Selection
